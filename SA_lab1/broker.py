@@ -4,6 +4,7 @@ from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from flask_socketio import SocketIO, emit
 import queue
+import logging
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=60, ping_interval=25)

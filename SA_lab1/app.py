@@ -36,7 +36,8 @@ def get_history():
 
 def publish_message(platform, message):
     """通过 HTTP 请求将消息发布到 Broker。"""
-    url = "http://localhost:9999/publish"
+    url = "http://192.168.2.12:11454/publish"
+    print(message)
     payload = {
         "platform": platform,
         "message": message
