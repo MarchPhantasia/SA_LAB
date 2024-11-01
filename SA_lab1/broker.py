@@ -1,31 +1,44 @@
+
+import eventlet
+from numpy import block
+eventlet.monkey_patch()
+
 from flask import Flask, request, jsonify
 from threading import Lock
 from collections import defaultdict, deque
-from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
-from flask_socketio import SocketIO, emit
-import queue
+from concurrent.futures import ThreadPoolExecutor
+from flask_socketio import SocketIO, join_room
 import logging
+import redis
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=60, ping_interval=25)
+socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*", ping_timeout=60)
 
-
-# 使用字典存储每个用户的订阅平台及其消息列表
+# 存储用户订阅的平台及其消息列表
 user_messages = defaultdict(lambda: defaultdict(deque))  # {user_name: {platform_name: deque([message_list])}}
 subscribe_map = defaultdict(list)  # {user_name: [platform_list]}
 lock = Lock()  # 保护共享资源的锁
+count: int = 0  # 计数器
+# 创建线程池
+general_executor = ThreadPoolExecutor(max_workers=50)  # 普通优先级线程池
 
-# 创建两个线程池：一个用于 fetch 请求（优先级高），一个用于其他请求
-fetch_executor = ThreadPoolExecutor(max_workers=5)  # 高优先级线程池
-general_executor = ThreadPoolExecutor(max_workers=20)  # 普通优先级线程池
+# 添加 'join' 事件的处理函数
+@socketio.on('join')
+def handle_join(data):
+    user_name = data['user_name']
+    join_room(user_name)
+    print(f"User {user_name} has joined the room.")
 
 def add_message_to_users(platform_name, message):
-    """将消息添加到每个订阅了该平台的用户的消息队列。"""
+    """将消息添加到每个订阅了该平台的用户的消息队列，并通过 SocketIO 发送。"""
+    global count
     with lock:
         for user, platforms in subscribe_map.items():
             if platform_name in platforms:
                 user_messages[user][platform_name].append(message)
-                socketio.emit(platform_name, message)
+                socketio.emit(platform_name, message, to=user)  # 发送消息到特定用户
+                # print(f"Published message to {user} on {platform_name}, count: {count}")
+                # count += 1
         return {"status": "Message published"}, 200
 
 def add_subscription(user_name, platform_name):
@@ -39,14 +52,16 @@ def add_subscription(user_name, platform_name):
 
 @app.route('/publish', methods=['POST'])
 def handle_publish():
+    global count
     """发布消息到某个平台，并将其分发给订阅该平台的用户。"""
     data = request.get_json()
     platform_name = data['platform']
     message = data['message']
 
-    # 使用普通线程池异步执行发布操作
     future = general_executor.submit(add_message_to_users, platform_name, message)
     result, status = future.result()
+    print(f"count: {count}")
+    count += 1
     return jsonify(result), status
 
 @app.route('/subscribe', methods=['POST'])
@@ -55,35 +70,10 @@ def handle_subscribe():
     data = request.get_json()
     user_name = data['user']
     platform_name = data['platform']
-
-    # 使用普通线程池异步执行订阅操作
+    print(f"Received subscription request from {user_name} to {platform_name}")
     future = general_executor.submit(add_subscription, user_name, platform_name)
     result, status = future.result()
     return jsonify(result), status
 
-@app.route('/fetch', methods=['POST'])
-def fetch_messages():
-    """根据用户的订阅，获取尚未处理的消息并返回给用户。"""
-    user_name = request.json.get('user')
-
-    # 使用高优先级线程池处理 fetch 请求
-    future = fetch_executor.submit(process_fetch, user_name)
-    result, status = future.result()
-    return jsonify(result), status
-
-def process_fetch(user_name):
-    """处理 fetch 请求的具体逻辑。"""
-    with lock:
-        if user_name not in subscribe_map:
-            return {"status": "User not found"}, 404
-
-        user_data = {}
-        for platform in subscribe_map[user_name]:
-            messages = list(user_messages[user_name][platform])
-            user_data[platform] = messages
-            user_messages[user_name][platform].clear()  # 清空已拉取的消息
-
-        return user_data, 200
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=9999, threaded=True)  # 开启多线程支持
+    socketio.run(app=app, host='0.0.0.0', port=9999)
