@@ -22,8 +22,7 @@ connection_pool = pooling.MySQLConnectionPool(
     port="3321",
     user=dbuser,
     password=dbpassword,
-    database="sharding_db",
-    reset_session=False
+    database="sharding_db"
 )
 
 user_name = "mysql_user"  # 替换为实际用户名
@@ -66,15 +65,15 @@ def handle_message(message):
             (conversation_id, chat_history, tokens_used),
         )
         conn.commit()
-        print(f"count: {count}")
-        count += 1
+        # print(f"count: {count}")
+        # count += 1
     except Error as e:
         print(f"Error handling message in MySQL subscriber: {e}")
     finally:
         if cursor:
             cursor.close()
-        if conn:
-            conn.close()
+        # if conn:
+        #     conn.close()
 
 
 def subscribe_user_to_platform(user, platform):
