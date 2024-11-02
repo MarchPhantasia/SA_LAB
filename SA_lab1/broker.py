@@ -18,7 +18,7 @@ socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*", ping_t
 user_messages = defaultdict(lambda: defaultdict(deque))  # {user_name: {platform_name: deque([message_list])}}
 subscribe_map = defaultdict(list)  # {user_name: [platform_list]}
 lock = Lock()  # 保护共享资源的锁
-count: int = 0  # 计数器
+# count: int = 0  # 计数器
 # 创建线程池
 general_executor = ThreadPoolExecutor(max_workers=50)  # 普通优先级线程池
 
@@ -31,7 +31,7 @@ def handle_join(data):
 
 def add_message_to_users(platform_name, message):
     """将消息添加到每个订阅了该平台的用户的消息队列，并通过 SocketIO 发送。"""
-    global count
+    # global count
     with lock:
         for user, platforms in subscribe_map.items():
             if platform_name in platforms:
@@ -52,7 +52,7 @@ def add_subscription(user_name, platform_name):
 
 @app.route('/publish', methods=['POST'])
 def handle_publish():
-    global count
+    # global count
     """发布消息到某个平台，并将其分发给订阅该平台的用户。"""
     data = request.get_json()
     platform_name = data['platform']
@@ -60,8 +60,8 @@ def handle_publish():
 
     future = general_executor.submit(add_message_to_users, platform_name, message)
     result, status = future.result()
-    print(f"count: {count}")
-    count += 1
+    # print(f"count: {count}")
+    # count += 1
     return jsonify(result), status
 
 @app.route('/subscribe', methods=['POST'])

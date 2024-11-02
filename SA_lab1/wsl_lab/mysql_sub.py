@@ -2,37 +2,38 @@ import requests
 import threading
 import json
 from dbutils.pooled_db import PooledDB
+from concurrent.futures import ThreadPoolExecutor
 import pymysql
 from datetime import datetime
 import uuid
 import os
 from dotenv import load_dotenv
 import socketio
+from flask_socketio import SocketIO
 
 # 加载环境变量
 load_dotenv()
-dbuser = "root"
-dbpassword = "root"
 
-# 初始化 MySQL 连接池
+
+# 初始化 PostgreSQL 连接池
 connection_pool = PooledDB(
     creator=pymysql,
     db="sharding_db",
     user="root",
     password="root",
-    host="127.0.0.1",
+    host="192.168.2.26",
     port=3321,
     mincached=2,  # 最小空闲连接数
     maxcached=5,  # 最大空闲连接数
     maxconnections=None,  # 最大连接数
 )
 
-user_name = "mysql_user"  # 替换为实际用户名
+user_name = "mysql"  # 替换为实际用户名
 # 初始化 SocketIO 客户端
 sio = socketio.Client()
-count: int = 0
 
 
+# count:int = 0
 # 在连接成功后，发送用户名给服务器
 @sio.event
 def connect():
@@ -68,7 +69,7 @@ def handle_message(message):
             (conversation_id, chat_history, tokens_used),
         )
         conn.commit()
-        # print(len(result))
+
         # print(f"Logged conversation {conversation_id} from platform 'log' to PostgreSQL.")
     except Exception as e:
         print(f"Error handling message in MySQL subscriber: {e}")
@@ -96,6 +97,7 @@ def subscribe_user_to_platform(user, platform):
 def start_listener(user):
     """启动 SocketIO 客户端监听消息。"""
     sio.connect("http://localhost:9999", wait_timeout=10)
+
     sio.wait()
 
 
