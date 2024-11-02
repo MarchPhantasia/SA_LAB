@@ -17,12 +17,13 @@ dbpassword = "root"
 connection_pool = pooling.MySQLConnectionPool(
     pool_name="mypool",
     pool_size=5,  # 设置连接池大小
-    #TODO: 修改为自己的数据库信息
-    host="192.168.2.8",
+    # TODO: 修改为自己的数据库信息
+    host="127.0.0.1",
     port="3321",
     user=dbuser,
     password=dbpassword,
     database="sharding_db",
+    reset_session=False
 )
 
 user_name = "mysql_user"  # 替换为实际用户名
@@ -57,11 +58,11 @@ def handle_message(message):
         # print(f"Received message: {message}")
         conversation_id = message.get("conversation_id", str(uuid.uuid4()))
         tokens_used = message.get("tokens_used", 0)
-        chat_history = message.get("chat_history", str)
+        chat_history = message.get("chat_history", "")
         # timestamp = datetime.now()
 
         cursor.execute(
-            "INSERT INTO conversation_logs (conversation_id, chat_history, token_usage) VALUES (%s, %s, %s)",
+            "INSERT INTO t_chat_history (conversation_id, chat_history, token_usage) VALUES (%s, %s, %s)",
             (conversation_id, chat_history, tokens_used),
         )
         conn.commit()
@@ -78,7 +79,7 @@ def handle_message(message):
 
 def subscribe_user_to_platform(user, platform):
     """订阅用户到指定平台。"""
-    url = "http://172.21.198.117:9999/subscribe"
+    url = "http://localhost:9999/subscribe"
     payload = {"user": user, "platform": platform}
     try:
         response = requests.post(url, json=payload)
@@ -92,7 +93,7 @@ def subscribe_user_to_platform(user, platform):
 
 def start_listener(user):
     """启动 SocketIO 客户端监听消息。"""
-    sio.connect("http://172.21.198.117:9999", wait_timeout=10)
+    sio.connect("http://localhost:9999", wait_timeout=10)
     sio.wait()
 
 
