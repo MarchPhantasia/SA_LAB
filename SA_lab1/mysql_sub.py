@@ -62,10 +62,22 @@ def handle_message(message):
         conversation_id = message.get("conversation_id", str(uuid.uuid4()))
         tokens_used = message.get("tokens_used", 0)
         chat_history = message.get("chat_history", "")
-
+        chat_history = json.dumps(chat_history)
+        title = message.get("title", "")
+        # cursor.execute(
+        #     "INSERT INTO t_chat_history (conversation_id, title, chat_history, token_usage) VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE {conversation_id}",
+        #     (conversation_id, title, chat_history, tokens_used),
+        # )
         cursor.execute(
-            "INSERT INTO t_chat_history (conversation_id, chat_history, token_usage) VALUES (%s, %s, %s)",
-            (conversation_id, chat_history, tokens_used),
+            """
+            INSERT INTO t_chat_history (conversation_id, title, chat_history, token_usage)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                title = VALUES(title),
+                chat_history = VALUES(chat_history),
+                token_usage = VALUES(token_usage)
+            """,
+            (conversation_id, title, chat_history, tokens_used),
         )
         conn.commit()
         # print(len(result))
