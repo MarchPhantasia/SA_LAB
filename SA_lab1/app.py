@@ -53,7 +53,7 @@ def publish_message(platform, message):
         st.error(f"Error publishing message: {e}")
 
 # 初始化 Streamlit 界面
-st.title("🤡软件架构小助手")
+st.title("软件架构小助手")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -118,7 +118,7 @@ if prompt := st.chat_input("输入你的问题"):
     # 创建消息
     conversation = {
         "conversation_id": st.session_state.conversation_id,
-        "messages": st.session_state.messages,
+        "chat_history": st.session_state.messages,
         "tokens_used": tokens_used,
         "logs": st.session_state.logs,
         "title": st.session_state.title
