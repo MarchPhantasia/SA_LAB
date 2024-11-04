@@ -21,7 +21,7 @@ connection_pool = PooledDB(
     db="sharding_db",
     user="root",
     password="root",
-    host="192.168.2.26",
+    host="127.0.0.1",
     port=3321,
     mincached=2,  # 最小空闲连接数
     maxcached=5,  # 最大空闲连接数
@@ -63,10 +63,19 @@ def handle_message(message):
         conversation_id = message.get("conversation_id", str(uuid.uuid4()))
         tokens_used = message.get("tokens_used", 0)
         chat_history = message.get("chat_history", "")
+        chat_history = json.dumps(chat_history)
+        title = message.get("title", "")
 
         cursor.execute(
-            "INSERT INTO t_chat_history (conversation_id, chat_history, token_usage) VALUES (%s, %s, %s)",
-            (conversation_id, chat_history, tokens_used),
+            """
+            INSERT INTO t_chat_history (conversation_id, title, chat_history, token_usage)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                title = VALUES(title),
+                chat_history = VALUES(chat_history),
+                token_usage = VALUES(token_usage)
+            """,
+            (conversation_id, title, chat_history, tokens_used),
         )
         conn.commit()
 
