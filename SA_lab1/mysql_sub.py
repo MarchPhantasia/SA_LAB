@@ -18,7 +18,7 @@ connection_pool = pooling.MySQLConnectionPool(
     pool_name="mypool",
     pool_size=5,  # 设置连接池大小
     #TODO: 修改为自己的数据库信息
-    host="192.168.2.8",
+    host="192.168.2.26",
     port="3321",
     user=dbuser,
     password=dbpassword,
@@ -47,7 +47,6 @@ def disconnect():
 @sio.on("log")  # 监听具体的消息平台
 def handle_message(message):
     """处理单条消息并存储到 MySQL。"""
-    global count
     conn = None
     cursor = None
     try:
@@ -61,12 +60,10 @@ def handle_message(message):
         # timestamp = datetime.now()
 
         cursor.execute(
-            "INSERT INTO conversation_logs (conversation_id, chat_history, token_usage) VALUES (%s, %s, %s)",
+            "INSERT INTO t_chat_history (conversation_id, chat_history, token_usage) VALUES (%s, %s, %s)",
             (conversation_id, chat_history, tokens_used),
         )
         conn.commit()
-        print(f"count: {count}")
-        count += 1
     except Error as e:
         print(f"Error handling message in MySQL subscriber: {e}")
     finally:
@@ -78,7 +75,7 @@ def handle_message(message):
 
 def subscribe_user_to_platform(user, platform):
     """订阅用户到指定平台。"""
-    url = "http://172.21.198.117:9999/subscribe"
+    url = "http://127.0.0.1:9999/subscribe"
     payload = {"user": user, "platform": platform}
     try:
         response = requests.post(url, json=payload)
@@ -92,7 +89,7 @@ def subscribe_user_to_platform(user, platform):
 
 def start_listener(user):
     """启动 SocketIO 客户端监听消息。"""
-    sio.connect("http://172.21.198.117:9999", wait_timeout=10)
+    sio.connect("http://127.0.0.1:9999", wait_timeout=10)
     sio.wait()
 
 

@@ -7,7 +7,7 @@ import eventlet
 from flask_socketio import SocketIO, join_room
 import queue
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", message_queue='redis://localhost:6379/0', ping_timeout=60)
+socketio = SocketIO(app, cors_allowed_origins="*", message_queue='redis://127.0.0.1:6379/0', ping_timeout=60)
 
 import logging
 import redis

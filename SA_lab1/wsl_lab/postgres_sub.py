@@ -85,7 +85,7 @@ def subscribe_user_to_platform(user, platform):
 
 def start_listener(user):
     """启动 SocketIO 客户端监听消息。"""
-    sio.connect('http://localhost:9999', wait_timeout=10)
+    sio.connect('http://127.0.0.1:9999', wait_timeout=10)
     
     sio.wait()
 
