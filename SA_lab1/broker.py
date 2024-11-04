@@ -57,7 +57,6 @@ def handle_publish():
     data = request.get_json()
     platform_name = data['platform']
     message = data['message']
-
     future = general_executor.submit(add_message_to_users, platform_name, message)
     result, status = future.result()
     # print(f"count: {count}")

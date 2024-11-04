@@ -35,7 +35,7 @@ llm = ChatZhipuAI(
     streaming=True
 )
 def build_app():
-    system_prompt = "你是一个为了软件架构而生的AI助手，辅助进行软件架构设计，你的名字是HIT软件架构小助手"
+    system_prompt = "You're an AI assistant. You're helping a user with a question. "
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", system_prompt),
@@ -77,7 +77,7 @@ def generate(app, conversation_id, messages_history, input):
 def generate_title(chat_history):
     title_prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", "把以下对话总结为一个简短标题，禁止带有任何符号"),
+            ("system", "Summarizing the below chat content as a short title, don't include any punctuation."),
             ("human", "{input}"),
         ]
     )

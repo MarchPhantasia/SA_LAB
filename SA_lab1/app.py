@@ -8,25 +8,51 @@ import time
 import requests  # 使用 requests 代替 socket
 from dotenv import load_dotenv
 from chain import build_app, generate, generate_title, num_tokens_from_string
-
-load_dotenv()
+import redis_cache
+from collections import OrderedDict
 
 # Redis 客户端配置（用于即时更新历史）
 redis_client = redis.Redis(host="localhost", port=6379, db=0)
 
-def get_history():
-    """获取 Redis 中存储的对话历史，并按 timestamp 降序排序。"""
+# def get_history():
+#     """获取 Redis 中存储的对话历史，并按 timestamp 降序排序。"""
+#     try:
+#         keys = redis_client.zrevrange("conversations_by_timestamp", 0, -1)
+#         history = []
+#         for key in keys:
+#             convo = redis_client.hgetall(key)
+#             history.append(
+#                 {
+#                     "conversation_id": key.decode().split(":")[1],
+#                     "messages": json.loads(convo.get(b"messages", b"[]").decode()),
+#                     "title": convo.get(b"title", b"").decode(),
+#                     "timestamp": int(convo.get(b"timestamp", b"0").decode())
+#                 }
+#             )
+#         return history
+#     except Exception as e:
+#         st.sidebar.error(f"Error fetching history: {e}")
+#         return []
+
+def get_history(page):
+    history = []
+    if page == 1:
+        conversations = redis_cache.update_cache()
+    else:
+        print("Fetching from cache")
+        conversations = redis_cache.get_all_conversations(page)
     try:
-        keys = redis_client.zrevrange("conversations_by_timestamp", 0, -1)
-        history = []
-        for key in keys:
-            convo = redis_client.hgetall(key)
+        for conv in conversations:
+            conversation_id, title, chat_history, timestamp, token_usage = conv
+            chat_history = json.loads(chat_history)
+            timestamp = timestamp.strftime("%Y-%m-%d %H:%M:%S")
             history.append(
                 {
-                    "conversation_id": key.decode().split(":")[1],
-                    "messages": json.loads(convo.get(b"messages", b"[]").decode()),
-                    "title": convo.get(b"title", b"").decode(),
-                    "timestamp": int(convo.get(b"timestamp", b"0").decode())
+                "conversation_id": conversation_id,
+                "title": title,
+                "chat_history": chat_history,
+                "timestamp": timestamp,
+                "token_usage": token_usage
                 }
             )
         return history
@@ -37,7 +63,6 @@ def get_history():
 def publish_message(platform, message):
     """通过 HTTP 请求将消息发布到 Broker。"""
     url = "http://localhost:9999/publish"
-    print(message)
     payload = {
         "platform": platform,
         "message": message
@@ -63,20 +88,66 @@ if "logs" not in st.session_state:
     st.session_state.logs = []
 if "title" not in st.session_state:
     st.session_state.title = ""
+if "page" not in st.session_state:
+    st.session_state.page = 1
+# 初始化或更新有序集合的 history_list
+if "history_list" not in st.session_state:
+    st.session_state.history_list = OrderedDict()
+
+# 获取历史记录
+history = get_history(1)
+
+# 将获取的历史记录加入到有序集合中
+for convo in history:
+    convo_id = convo["conversation_id"]
+    if convo_id not in st.session_state.history_list:
+        st.session_state.history_list[convo_id] = convo
+
+# 按时间戳排序有序集合
+st.session_state.history_list = OrderedDict(
+    sorted(
+        st.session_state.history_list.items(),
+        key=lambda x: x[1]["timestamp"],
+        reverse=True,
+    )
+)
+
 # 侧边栏显示历史对话
 st.sidebar.header("历史对话")
-
-history = get_history()
-for convo in history:
-    if st.sidebar.button(f"{convo['title']}", key=convo['conversation_id'], use_container_width=True):
-        st.session_state.conversation_id = convo['conversation_id']
-        st.session_state.messages = convo['messages']
-        st.session_state.title = convo['title']
 
 if st.sidebar.button("✨新建对话", use_container_width=True):
     st.session_state.conversation_id = str(uuid.uuid4())
     st.session_state.messages = []
     st.session_state.title = ""
+
+
+for convo_id, convo in st.session_state.history_list.items():
+    if st.sidebar.button(f"{convo['title']}", key=convo_id, use_container_width=True):
+        st.session_state.conversation_id = convo_id
+        st.session_state.messages = convo["chat_history"]
+        st.session_state.title = convo["title"]
+
+if st.sidebar.button("加载更多对话", use_container_width=True):
+    st.session_state.page += 1
+    history = get_history(st.session_state.page)
+    print(history)
+    if history is not None:
+        for convo in history:
+            convo_id = convo["conversation_id"]
+            if convo_id not in st.session_state.history_list:
+                st.session_state.history_list[convo_id] = convo
+        # 重新排序并刷新页面
+        st.session_state.history_list = OrderedDict(
+            sorted(
+                st.session_state.history_list.items(),
+                key=lambda x: x[1]["timestamp"],
+                reverse=True,
+            )
+        )
+        st.rerun()
+    else:
+        st.session_state.page -= 1
+        st.warning("没有更多对话记录了！")
 
 messages_history = []
 
