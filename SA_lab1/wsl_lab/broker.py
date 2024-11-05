@@ -50,20 +50,6 @@ def add_subscription(user_name, platform_name):
         else:
             return {"status": "Already subscribed"}, 409
 
-# @app.route('/publish', methods=['POST'])
-# def handle_publish():
-#     global count
-#     """发布消息到某个平台，并将其分发给订阅该平台的用户。"""
-#     data = request.get_json()
-#     platform_name = data['platform']
-#     message = data['message']
-
-#     future = general_executor.submit(add_message_to_users, platform_name, message)
-#     result, status = future.result()
-#     # print(f"count: {count}")
-#     # count += 1
-#     return jsonify(result), status
-
 # 定时任务，定期发送消息
 def send_messages():
     while True:
