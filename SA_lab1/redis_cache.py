@@ -49,7 +49,10 @@ def update_cache():
     )
 
     recent_conversations = cursor.fetchall()
+    print(recent_conversations)
+    if not recent_conversations:
 
+        return []
     # 更新第一页缓存
     page_data = {}
     for conv in recent_conversations:
@@ -98,7 +101,7 @@ def get_all_conversations(page=1, page_size=10):
     #     # 解码缓存数据
     #     for key in cached_data:
     #         cached_data[key] = json.loads(cached_data[key].decode("utf-8"))
- 
+
     #     return cached_data
 
     # 数据库查询分页数据
@@ -112,8 +115,8 @@ def get_all_conversations(page=1, page_size=10):
 
     if not conversations:
         # 如果该页没有数据，缓存空标记
-        # redis_client.hset(cache_key, mapping={"empty": "true"})
-        # redis_client.expire(cache_key, 3600)
+        redis_client.hset(cache_key, mapping={"empty": "true"})
+        redis_client.expire(cache_key, 3600)
         return []
     # 将查询的数据写入缓存
     page_data = {}
@@ -147,23 +150,117 @@ def get_all_conversations(page=1, page_size=10):
     return conversations
 
 
-# 3. 通过conversation_id查询记录
+# 3. 通过conversation_id查询记录,添加互斥锁机制
 def get_conversation_by_id(conversation_id):
     # 从 Redis 中获取哈希表数据
     cached_data = redis_client.hgetall(f"conversation:{conversation_id}")
 
     # 如果缓存中存在数据，将其转换为字典形式并返回
     if cached_data:
-        # 解码 Redis 返回的数据（通常为字节，需要解码为字符串）
         return {
             key.decode("utf-8"): value.decode("utf-8")
             for key, value in cached_data.items()
         }
 
-    # 如果缓存中没有数据，返回 None
-    return None
+    # 获取或创建该conversation_id的互斥锁
+    lock = mutex_locks.setdefault(conversation_id, Lock())
+
+    with lock:
+        # 再次检查缓存，防止其他线程已更新
+        cached_data = redis_client.hgetall(f"conversation:{conversation_id}")
+        if cached_data:
+            return {
+                key.decode("utf-8"): value.decode("utf-8")
+                for key, value in cached_data.items()
+            }
+
+        # 从数据库中查询
+        conn = connection_pool.connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT conversation_id, title, chat_history, timestamp, token_usage FROM t_chat_history WHERE conversation_id = %s",
+            (conversation_id,),
+        )
+        conversation = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if conversation:
+            conversation_id, title, chat_history, timestamp, token_usage = conversation
+            chat_history_json = json.dumps(json.loads(chat_history))
+            conversation_data = {
+                "chat_history": chat_history_json,
+                "title": title,
+                "timestamp": timestamp.isoformat(),
+                "token_usage": token_usage,
+            }
+
+            # 将数据写入缓存
+            redis_client.hset(
+                f"conversation:{conversation_id}", mapping=conversation_data
+            )
+            redis_client.expire(f"conversation:{conversation_id}", 3600)
+
+            return conversation_data
+        else:
+            # 如果数据库中没有数据，设置空标记
+            redis_client.hset(
+                f"conversation:{conversation_id}", mapping={"empty": "true"}
+            )
+            redis_client.expire(f"conversation:{conversation_id}", 3600)
+            return None
+
+
+def test_set_empty_flag_in_redis_when_data_not_exist():
+    """
+    测试查询一个不存在的会话 ID，是否在 Redis 中设置了空标记
+    """
+    conversation_id = "11"
+
+    # 调用函数
+    result = get_conversation_by_id(conversation_id)
+
+    # 检查返回值为 None
+    if result is not None:
+        print("返回值不为None")
+    else:
+        print("返回值为None")
+
+    # 检查 Redis 中是否设置了空标记
+    cached_data = redis_client.hgetall(f"conversation:{conversation_id}")
+    if cached_data[b"empty"] == b"true":
+        print("空标记设置成功")
+    else:
+        print("空标记设置失败")
+import threading
+
+def test_mutex_lock_prevents_multiple_db_queries():
+    """
+    测试多个线程同时查询一个不存在的会话 ID，是否只有一个请求访问数据库
+    """
+    conversation_id = "111"
+
+
+    # 记录数据库查询次数
+    conn = connection_pool.connection()
+    cursor = conn.cursor()
+    execute_count = {"count": 0}
+
+    # 定义线程目标函数
+    def target():
+        result = get_conversation_by_id(conversation_id)
+        print(result)
+        if result is not None:
+            print("返回值不为None,查询了redis")
+
+    # 启动多个线程同时调用函数
+    thread_count = 5
+    threads = [threading.Thread(target=target) for _ in range(thread_count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
 
 if __name__ == "__main__":
     # 测试
-    conversations = get_all_conversations()
-    print(conversations)
+    test_mutex_lock_prevents_multiple_db_queries()
